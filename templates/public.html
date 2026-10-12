@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Public files | K1box{% endblock %}
+{% block content %}
+<section class="public-hero">
+  <div class="eyebrow">OPEN TO EVERYONE</div>
+  <h1>Public files</h1>
+  <p>Files shared publicly by users are available for everyone on the network to view and download.</p>
+  {% if g.user %}
+    <a class="button button-white" href="{{ url_for('dashboard') }}">Go to my files <span aria-hidden="true">←</span></a>
+  {% else %}
+    <a class="button button-white" href="{{ url_for('login') }}">Log in to upload files <span aria-hidden="true">←</span></a>
+  {% endif %}
+</section>
+<section class="section-block public-listing">
+  <div class="section-heading">
+    <div><div class="eyebrow">SHARED LIBRARY</div><h2>Public files <span class="count">{{ files|length }}</span></h2></div>
+  </div>
+  {% if files %}
+    <div class="file-list">
+      {% for file in files %}
+        <article class="file-row">
+          <div class="file-icon file-icon-public">↧</div>
+          <div class="file-info">
+            <a class="file-name" href="{{ url_for('download', file_id=file.id) }}">{{ file.original_name }}</a>
+            <div class="file-meta"><span>Uploaded by {{ file.owner_name }}</span><span>·</span><span>{{ file.uploaded_at|local_datetime }}</span></div>
+          </div>
+          <a class="button button-small button-primary" href="{{ url_for('download', file_id=file.id) }}">Download</a>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state"><div class="empty-icon">◉</div><strong>No public files yet</strong><p>After uploading a file, set its visibility to public to show it here.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

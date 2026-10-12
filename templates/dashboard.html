@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}My files | K1box{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div>
+    <div class="eyebrow">YOUR PERSONAL SPACE</div>
+    <h1>Hello {{ g.user.username }}, your files are ready</h1>
+    <p class="muted">Keep your files, share them with other users, or make them public.</p>
+  </div>
+  <a class="button button-light" href="{{ url_for('public_files') }}">Browse public files <span aria-hidden="true">←</span></a>
+</section>
+
+<section class="panel upload-panel">
+  <div class="panel-title">
+    <div class="icon-tile">↑</div>
+    <div><h2>Upload a file</h2><p class="muted">Maximum file size: 100 MB.</p></div>
+  </div>
+  <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="upload-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="file-picker" for="file">
+      <span class="picker-icon">＋</span>
+      <span class="picker-copy">
+        <strong>Click to choose a file</strong>
+        <small>Any file type is supported</small>
+        <small id="selected-file-name" class="selected-file-name" aria-live="polite">No file selected</small>
+      </span>
+      <input id="file" type="file" name="file" required>
+    </label>
+    <label class="visibility-picker" for="upload-visibility">
+      <span>Visibility after upload</span>
+      <select id="upload-visibility" name="visibility">
+        <option value="private">Private — only me</option>
+        <option value="public">Public — visible to everyone</option>
+      </select>
+    </label>
+    <button class="button button-primary" type="submit">Upload file</button>
+  </form>
+</section>
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
+
+<section class="section-block">
+  <div class="section-heading">
+    <div><div class="eyebrow">YOUR LIBRARY</div><h2>My files <span class="count">{{ owned_files|length }}</span></h2></div>
+  </div>
+  {% if owned_files %}
+    <div class="file-list">
+      {% for file in owned_files %}
+        <article class="file-row">
+          <div class="file-icon">▤</div>
+          <div class="file-info">
+            <a class="file-name" href="{{ url_for('download', file_id=file.id) }}">{{ file.original_name }}</a>
+            <div class="file-meta">
+              <span>{{ file.uploaded_at|local_datetime }}</span><span>·</span>
+              <span class="badge {{ 'badge-public' if file.visibility == 'public' else 'badge-private' }}">{{ 'Public' if file.visibility == 'public' else 'Private' }}</span>
+              {% if file.share_count %}<span>· Shared with {{ file.share_count }} users</span>{% endif %}
+            </div>
+          </div>
+          <div class="file-actions">
+            {% if users %}
+              <form action="{{ url_for('share_file', file_id=file.id) }}" method="post" class="share-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <select name="user_id" aria-label="Select a user to share with" required>
+                  <option value="">Share with a user…</option>
+                  {% for user in users %}<option value="{{ user.id }}">{{ user.username }}</option>{% endfor %}
+                </select>
+                <button class="button button-small button-light" type="submit">Share</button>
+              </form>
+            {% endif %}
+            <form action="{{ url_for('change_visibility', file_id=file.id) }}" method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="visibility" value="{{ 'private' if file.visibility == 'public' else 'public' }}">
+              <button class="text-button" type="submit">{{ 'Make private' if file.visibility == 'public' else 'Make public' }}</button>
+            </form>
+            <form action="{{ url_for('delete_file', file_id=file.id) }}" method="post" onsubmit="return confirm('Delete this file permanently?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="text-button text-danger" type="submit">Delete</button>
+            </form>
+          </div>
+          {% for recipient in share_recipients if recipient.file_id == file.id %}
+            <div class="share-recipient">
+              <span>Shared with {{ recipient.username }}:</span>
+              <form action="{{ url_for('remove_share', file_id=file.id, user_id=recipient.user_id) }}" method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="text-button text-danger" type="submit">Revoke access</button>
+              </form>
+            </div>
+          {% endfor %}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state"><div class="empty-icon">▤</div><strong>No files here yet</strong><p>Upload your first file using the form above.</p></div>
+  {% endif %}
+</section>
+
+<section class="section-block">
+  <div class="section-heading">
+    <div><div class="eyebrow">SHARED WITH YOU</div><h2>Shared files <span class="count">{{ shared_files|length }}</span></h2></div>
+  </div>
+  {% if shared_files %}
+    <div class="file-list">
+      {% for file in shared_files %}
+        <article class="file-row">
+          <div class="file-icon file-icon-shared">↙</div>
+          <div class="file-info">
+            <a class="file-name" href="{{ url_for('download', file_id=file.id) }}">{{ file.original_name }}</a>
+            <div class="file-meta"><span>Shared by {{ file.owner_name }}</span><span>·</span><span>{{ file.uploaded_at|local_datetime }}</span></div>
+          </div>
+          <a class="button button-small button-light" href="{{ url_for('download', file_id=file.id) }}">Download</a>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-inline">No files have been shared with you.</div>
+  {% endif %}
+</section>
+{% endblock %}

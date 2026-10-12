@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Create account' if mode == 'register' else 'Log in' }} | K1box{% endblock %}
+{% block content %}
+<section class="auth-wrap">
+  <div class="auth-card">
+    <div class="eyebrow">YOUR NETWORK FILE SPACE</div>
+    <h1>{{ 'Create your account' if mode == 'register' else 'Welcome back' }}</h1>
+    <p class="muted">
+      {{ 'Create an account to upload and share your files.' if mode == 'register' else 'Log in to access your personal and shared files.' }}
+    </p>
+    <form method="post" class="stack-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" minlength="3" maxlength="30" required autofocus>
+      {% if mode == 'register' %}
+        <span class="field-hint">3–30 letters, numbers, or underscores</span>
+      {% endif %}
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="{{ 'new-password' if mode == 'register' else 'current-password' }}" minlength="{{ 8 if mode == 'register' else 1 }}" required>
+      {% if mode == 'register' %}
+        <span class="field-hint">At least 8 characters</span>
+      {% endif %}
+      <button class="button button-primary button-wide" type="submit">{{ 'Create account' if mode == 'register' else 'Log in' }}</button>
+    </form>
+    <p class="auth-switch">
+      {% if mode == 'register' %}
+        Already have an account? <a href="{{ url_for('login') }}">Log in</a>
+      {% else %}
+        Don’t have an account? <a href="{{ url_for('register') }}">Create one</a>
+      {% endif %}
+    </p>
+  </div>
+</section>
+{% endblock %}
