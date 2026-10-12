@@ -13,18 +13,24 @@
 <section class="panel upload-panel">
   <div class="panel-title">
     <div class="icon-tile">↑</div>
-    <div><h2>Upload a file</h2><p class="muted">Maximum file size: 100 MB.</p></div>
+    <div><h2>Upload files</h2><p class="muted">Up to 5 files at a time. No file-size limit is set by the app.</p></div>
   </div>
   <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="upload-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label class="file-picker" for="file">
       <span class="picker-icon">＋</span>
       <span class="picker-copy">
-        <strong>Click to choose a file</strong>
-        <small>Any file type is supported</small>
+        <strong>Click to choose files</strong>
+        <small>Select up to 5 files. Any file type is supported.</small>
         <small id="selected-file-name" class="selected-file-name" aria-live="polite">No file selected</small>
       </span>
-      <input id="file" type="file" name="file" required>
+      <input
+        id="file"
+        type="file"
+        name="files"
+        data-max-files="{{ config['MAX_UPLOAD_FILES'] }}"
+        multiple
+        required>
     </label>
     <label class="visibility-picker" for="upload-visibility">
       <span>Visibility after upload</span>
@@ -33,7 +39,14 @@
         <option value="public">Public — visible to everyone</option>
       </select>
     </label>
-    <button class="button button-primary" type="submit">Upload file</button>
+    <button class="button button-primary" type="submit">Upload files</button>
+    <div class="upload-progress" id="upload-progress" hidden>
+      <div class="upload-progress-heading">
+        <span id="upload-status" role="status" aria-live="polite">Preparing upload…</span>
+        <span id="upload-percent">0%</span>
+      </div>
+      <progress id="upload-progress-bar" max="100" value="0" aria-label="Upload progress">0%</progress>
+    </div>
   </form>
 </section>
 <script src="{{ url_for('static', filename='app.js') }}" defer></script>

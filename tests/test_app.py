@@ -55,6 +55,18 @@ class FileSharingAppTests(unittest.TestCase):
             follow_redirects=True,
         )
 
+    def upload_many(self, client, files, visibility: str = "private"):
+        return client.post(
+            "/upload",
+            data={
+                "csrf_token": self.csrf_token(client),
+                "visibility": visibility,
+                "files": files,
+            },
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
     def file_id(self, name: str) -> int:
         with self.app.app_context():
             row = self.app.get_db().execute(
@@ -134,6 +146,105 @@ class FileSharingAppTests(unittest.TestCase):
         self.assertEqual(download.status_code, 200)
         self.assertEqual(download.data, b"sample content")
         download.close()
+
+    def test_upload_progress_request_returns_json_success(self) -> None:
+        owner = self.create_user("xhr_uploader")
+        response = owner.post(
+            "/upload",
+            data={
+                "csrf_token": self.csrf_token(owner),
+                "visibility": "private",
+                "file": (io.BytesIO(b"sample content"), "xhr.txt"),
+            },
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, {"success": True, "count": 1})
+
+    def test_upload_has_no_app_configured_request_size_limit(self) -> None:
+        self.assertIsNone(self.app.config["MAX_CONTENT_LENGTH"])
+
+    def test_upload_accepts_file_larger_than_previous_limit(self) -> None:
+        owner = self.create_user("unlimited_uploader")
+        response = owner.post(
+            "/upload",
+            data={
+                "csrf_token": self.csrf_token(owner),
+                "visibility": "private",
+                "file": (io.BytesIO(b"x" * (1024 * 1024 + 1)), "large.txt"),
+            },
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, {"success": True, "count": 1})
+        with self.app.app_context():
+            self.assertIsNotNone(
+                self.app.get_db().execute(
+                    "SELECT id FROM files WHERE original_name = ?", ("large.txt",)
+                ).fetchone()
+            )
+
+    def test_upload_multiple_files_in_one_request(self) -> None:
+        owner = self.create_user("multi_uploader")
+        response = self.upload_many(
+            owner,
+            [
+                (io.BytesIO(b"first file"), "first.txt"),
+                (io.BytesIO(b"second file"), "second.txt"),
+            ],
+            visibility="public",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, {"success": True, "count": 2})
+        with self.app.app_context():
+            files = self.app.get_db().execute(
+                "SELECT original_name, visibility FROM files ORDER BY original_name"
+            ).fetchall()
+        self.assertEqual(
+            [(file["original_name"], file["visibility"]) for file in files],
+            [("first.txt", "public"), ("second.txt", "public")],
+        )
+
+    def test_upload_rejects_batch_over_file_count_limit(self) -> None:
+        owner = self.create_user("batch_limit_user")
+        self.app.config["MAX_UPLOAD_FILES"] = 1
+        response = self.upload_many(
+            owner,
+            [
+                (io.BytesIO(b"first"), "first.txt"),
+                (io.BytesIO(b"second"), "second.txt"),
+            ],
+        )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(
+            response.json, {"error": "You can upload no more than 1 file(s) at a time."}
+        )
+        with self.app.app_context():
+            self.assertEqual(
+                self.app.get_db().execute("SELECT COUNT(*) FROM files").fetchone()[0],
+                0,
+            )
+
+    def test_upload_batch_has_no_total_size_limit(self) -> None:
+        owner = self.create_user("unlimited_batch_user")
+        response = self.upload_many(
+            owner,
+            [
+                (io.BytesIO(b"x" * (600 * 1024)), "first.txt"),
+                (io.BytesIO(b"y" * (600 * 1024)), "second.txt"),
+            ],
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, {"success": True, "count": 2})
+        with self.app.app_context():
+            self.assertEqual(self.app.get_db().execute("SELECT COUNT(*) FROM files").fetchone()[0], 2)
 
     def test_private_file_requires_owner_or_explicit_share(self) -> None:
         owner = self.create_user("owner")

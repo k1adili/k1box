@@ -14,6 +14,7 @@ from flask import (
     abort,
     flash,
     g,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -27,6 +28,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 F = TypeVar("F", bound=Callable[..., Any])
 TEHRAN_TIMEZONE = timezone(timedelta(hours=3, minutes=30))
+MAX_UPLOAD_FILES = 5
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,7 +73,8 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         SECRET_KEY=os.environ.get("K1BOX_SECRET_KEY") or secrets.token_hex(32),
         DATABASE=os.path.join(app.instance_path, "k1box.sqlite3"),
         UPLOAD_FOLDER=os.path.join(app.instance_path, "uploads"),
-        MAX_CONTENT_LENGTH=100 * 1024 * 1024,
+        MAX_UPLOAD_FILES=MAX_UPLOAD_FILES,
+        MAX_CONTENT_LENGTH=None,
     )
     if config:
         app.config.update(config)
@@ -459,31 +462,61 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     @app.post("/upload")
     @login_required
     def upload() -> Any:
-        uploaded = request.files.get("file")
-        if uploaded is None or not uploaded.filename:
+        is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        uploads = request.files.getlist("files")
+        if not uploads:
+            legacy_upload = request.files.get("file")
+            uploads = [legacy_upload] if legacy_upload is not None else []
+        uploads = [uploaded for uploaded in uploads if uploaded.filename]
+        if not uploads:
+            if is_xhr:
+                return jsonify(error="Choose at least one file."), 400
             flash("Choose a file first.", "error")
             return redirect(url_for("dashboard"))
 
-        original_name = uploaded.filename.replace("\\", "/").rsplit("/", 1)[-1]
-        original_name = "".join(character for character in original_name if character.isprintable()).strip()
-        if original_name in {"", ".", ".."}:
-            flash("Invalid file name.", "error")
+        if len(uploads) > app.config["MAX_UPLOAD_FILES"]:
+            message = (
+                f"You can upload no more than {app.config['MAX_UPLOAD_FILES']} "
+                f"file(s) at a time."
+            )
+            if is_xhr:
+                return jsonify(error=message), 413
+            flash(message, "error")
             return redirect(url_for("dashboard"))
 
-        stored_name = uuid.uuid4().hex
-        uploaded.save(os.path.join(app.config["UPLOAD_FOLDER"], stored_name))
+        prepared_uploads = []
+        for uploaded in uploads:
+            original_name = uploaded.filename.replace("\\", "/").rsplit("/", 1)[-1]
+            original_name = "".join(
+                character for character in original_name if character.isprintable()
+            ).strip()
+            if original_name in {"", ".", ".."}:
+                if is_xhr:
+                    return jsonify(error=f"Invalid file name: {uploaded.filename}."), 400
+                flash(f"Invalid file name: {uploaded.filename}.", "error")
+                return redirect(url_for("dashboard"))
+            prepared_uploads.append((uploaded, original_name, uuid.uuid4().hex))
+
         visibility = request.form.get("visibility", "private")
         if visibility not in {"private", "public"}:
             abort(400, description="Invalid file visibility.")
-        get_db().execute(
+
+        for uploaded, _original_name, stored_name in prepared_uploads:
+            uploaded.save(os.path.join(app.config["UPLOAD_FOLDER"], stored_name))
+        get_db().executemany(
             """
             INSERT INTO files (owner_id, original_name, stored_name, visibility)
             VALUES (?, ?, ?, ?)
             """,
-            (g.user["id"], original_name, stored_name, visibility),
+            [
+                (g.user["id"], original_name, stored_name, visibility)
+                for _uploaded, original_name, stored_name in prepared_uploads
+            ],
         )
         get_db().commit()
-        flash("File uploaded successfully.", "success")
+        if is_xhr:
+            return jsonify(success=True, count=len(prepared_uploads))
+        flash(f"{len(prepared_uploads)} file(s) uploaded successfully.", "success")
         return redirect(url_for("dashboard"))
 
     @app.get("/public")
@@ -609,7 +642,9 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
 
     @app.errorhandler(RequestEntityTooLarge)
     def too_large(_error: RequestEntityTooLarge) -> tuple[str, int]:
-        return render_template("error.html", message="The file exceeds the 100 MB size limit."), 413
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify(error="The upload request exceeds the allowed size."), 413
+        return render_template("error.html", message="The upload request exceeds the allowed size."), 413
 
     @app.errorhandler(400)
     def bad_request(error: Any) -> tuple[str, int]:

@@ -43,7 +43,11 @@ h2 { margin: 4px 0 0; font-size: 19px; letter-spacing: -.4px; }
 .panel-title { display: flex; align-items: center; gap: 13px; }
 .panel-title p { margin-top: 4px; font-size: 12px; }
 .icon-tile { display: grid; place-items: center; width: 43px; height: 43px; border-radius: 12px; color: var(--blue); background: #edf2ff; font-size: 24px; font-weight: 500; }
-.upload-form { display: flex; align-items: end; gap: 14px; margin-top: 22px; }
+.upload-form { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; margin-top: 22px; }
+.upload-progress { flex: 1 0 100%; display: grid; gap: 8px; }
+.upload-progress[hidden] { display: none; }
+.upload-progress-heading { display: flex; justify-content: space-between; gap: 12px; color: #65738a; font-size: 12px; }
+.upload-progress progress { width: 100%; height: 10px; accent-color: var(--blue); }
 .file-picker { min-height: 60px; display: flex; flex: 1; align-items: center; gap: 12px; padding: 10px 15px; border: 1px dashed #bac8e2; border-radius: 10px; color: #31435e; cursor: pointer; }
 .file-picker:hover { border-color: var(--blue); background: #f8faff; }
 .file-picker input { width: 1px; height: 1px; position: absolute; opacity: 0; }

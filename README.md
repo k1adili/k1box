@@ -10,7 +10,8 @@ A simple English-language web app for storing and sharing files on a local netwo
 - Browse and download public files, even without logging in
 - Choose whether a file is public or private during upload and change its visibility later
 - Administrator panel for managing accounts, granting administrator access, resetting passwords, and managing all files
-- 100 MB upload limit per request
+- Upload up to 5 files at a time, with no file-size limit configured by the app
+- Upload progress shown in the browser
 
 ## Administrator account
 
@@ -38,7 +39,7 @@ $env:K1BOX_SECRET_KEY = "a-long-random-value"
 python app.py
 ```
 
-The port can be changed with `K1BOX_PORT`. The database and uploaded files are stored in `instance\k1box.sqlite3` and `instance\uploads`, respectively.
+The port can be changed with `K1BOX_PORT`. The database and uploaded files are stored in `instance\k1box.sqlite3` and `instance\uploads`, respectively. The app does not impose an upload-size limit, but available disk space, the browser, or external web-server/proxy configuration may still limit uploads.
 
 ## Access note
 
