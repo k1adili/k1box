@@ -20,11 +20,16 @@
           <strong>{{ user.username }}</strong>
           <span class="admin-status">
             {% if user.is_admin %}Administrator{% else %}User{% endif %}
+            · {{ 'Active' if user.is_active else 'Inactive — approval required' }}
             {% if user.must_change_password %} · Password change required{% endif %}
           </span>
         </div>
         <div class="admin-actions">
           {% if user.id != g.user.id %}
+            <form action="{{ url_for('toggle_user_active', user_id=user.id) }}" method="post" onsubmit="return confirm('{{ 'Deactivate' if user.is_active else 'Activate' }} this account?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="text-button" type="submit">{{ 'Deactivate user' if user.is_active else 'Approve and activate' }}</button>
+            </form>
             <form action="{{ url_for('reset_user_password', user_id=user.id) }}" method="post" class="admin-reset-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="password" name="new_password" placeholder="Temporary password" aria-label="Temporary password for {{ user.username }}" minlength="8" required>

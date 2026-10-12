@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     is_admin INTEGER NOT NULL DEFAULT 0,
+    is_active INTEGER NOT NULL DEFAULT 1,
     must_change_password INTEGER NOT NULL DEFAULT 0,
     session_token TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -110,6 +111,10 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             db.execute(
                 "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0"
             )
+        if "is_active" not in user_columns:
+            db.execute(
+                "ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"
+            )
         if "must_change_password" not in user_columns:
             db.execute(
                 "ALTER TABLE users ADD COLUMN must_change_password "
@@ -155,14 +160,19 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         user_id = session.get("user_id")
         user = (
             get_db().execute(
-                "SELECT id, username, is_admin, must_change_password, session_token "
+                "SELECT id, username, is_admin, is_active, must_change_password, "
+                "session_token "
                 "FROM users WHERE id = ?",
                 (user_id,),
             ).fetchone()
             if user_id is not None
             else None
         )
-        if user is not None and session.get("session_token") == user["session_token"]:
+        if user is not None and not user["is_active"]:
+            session.clear()
+            flash("Your account is inactive. Contact an administrator.", "warning")
+            g.user = None
+        elif user is not None and session.get("session_token") == user["session_token"]:
             g.user = user
         else:
             if user_id is not None:
@@ -230,8 +240,9 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
                 try:
                     cursor = get_db().execute(
                         """
-                        INSERT INTO users (username, password_hash, session_token)
-                        VALUES (?, ?, ?)
+                        INSERT INTO users
+                            (username, password_hash, is_active, session_token)
+                        VALUES (?, ?, 0, ?)
                         """,
                         (
                             username,
@@ -243,14 +254,11 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
                 except sqlite3.IntegrityError:
                     flash("That username is already taken.", "error")
                 else:
-                    session.clear()
-                    session["user_id"] = cursor.lastrowid
-                    session["session_token"] = get_db().execute(
-                        "SELECT session_token FROM users WHERE id = ?",
-                        (cursor.lastrowid,),
-                    ).fetchone()["session_token"]
-                    flash("Your account has been created. Welcome!", "success")
-                    return redirect(url_for("dashboard"))
+                    flash(
+                        "Your account has been created and is waiting for administrator approval.",
+                        "success",
+                    )
+                    return redirect(url_for("login"))
         return render_template("auth.html", mode="register")
 
     @app.route("/login", methods=["GET", "POST"])
@@ -261,12 +269,17 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             username = request.form.get("username", "").strip()
             password = request.form.get("password", "")
             user = get_db().execute(
-                "SELECT id, username, password_hash, session_token "
+                "SELECT id, username, password_hash, session_token, is_active "
                 "FROM users WHERE username = ?",
                 (username,),
             ).fetchone()
             if user is None or not check_password_hash(user["password_hash"], password):
                 flash("Incorrect username or password.", "error")
+            elif not user["is_active"]:
+                flash(
+                    "Your account is waiting for administrator approval or has been deactivated.",
+                    "warning",
+                )
             else:
                 session.clear()
                 session["user_id"] = user["id"]
@@ -379,7 +392,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     def admin_panel() -> Any:
         users = get_db().execute(
             """
-            SELECT id, username, is_admin, must_change_password, created_at
+            SELECT id, username, is_admin, is_active, must_change_password, created_at
             FROM users ORDER BY username
             """
         ).fetchall()
@@ -430,6 +443,29 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             abort(404)
         get_db().commit()
         flash("User is now an administrator.", "success")
+        return redirect(url_for("admin_panel"))
+
+    @app.post("/admin/users/<int:user_id>/toggle-active")
+    @admin_required
+    def toggle_user_active(user_id: int) -> Any:
+        user = get_db().execute(
+            "SELECT is_active FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if user is None:
+            abort(404)
+        if user_id == g.user["id"] and user["is_active"]:
+            flash("You cannot deactivate your own account.", "error")
+            return redirect(url_for("admin_panel"))
+        new_is_active = 0 if user["is_active"] else 1
+        get_db().execute(
+            "UPDATE users SET is_active = ?, session_token = ? WHERE id = ?",
+            (new_is_active, secrets.token_urlsafe(32), user_id),
+        )
+        get_db().commit()
+        if new_is_active:
+            flash("User account activated.", "success")
+        else:
+            flash("User account deactivated and active sessions revoked.", "success")
         return redirect(url_for("admin_panel"))
 
     @app.post("/admin/users/<int:user_id>/delete")

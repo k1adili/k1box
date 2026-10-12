@@ -10,6 +10,7 @@ A simple English-language web app for storing and sharing files on a local netwo
 - Browse and download public files, even without logging in
 - Choose whether a file is public or private during upload and change its visibility later
 - Administrator panel for managing accounts, granting administrator access, resetting passwords, and managing all files
+- New accounts require administrator approval before they can log in; administrators can activate or deactivate accounts
 - Upload up to 5 files at a time, with no file-size limit configured by the app
 - Upload progress shown in the browser
 
@@ -43,7 +44,7 @@ The port can be changed with `K1BOX_PORT`. The database and uploaded files are s
 
 ## Access note
 
-Anyone on the network who knows the server address can view and download public files. Private files are available only to their owner and users with whom the owner has shared them. Account creation is open to users on the network; share the registration link only on a network you trust.
+Anyone on the network who knows the server address can view and download public files. Private files are available only to their owner and users with whom the owner has shared them. Anyone can submit a registration request, but an administrator must activate the account before the user can log in.
 
 This version is intended for simple use on a local network. If you expose the server beyond a trusted network, add authentication and operational configuration appropriate for your environment first.
 

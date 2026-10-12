@@ -6,7 +6,11 @@
     <div class="eyebrow">YOUR NETWORK FILE SPACE</div>
     <h1>{{ 'Create your account' if mode == 'register' else 'Welcome back' }}</h1>
     <p class="muted">
-      {{ 'Create an account to upload and share your files.' if mode == 'register' else 'Log in to access your personal and shared files.' }}
+      {% if mode == 'register' %}
+        Create an account to upload and share your files. Your account will be available after administrator approval.
+      {% else %}
+        Log in to access your personal and shared files.
+      {% endif %}
     </p>
     <form method="post" class="stack-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

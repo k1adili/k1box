@@ -33,6 +33,22 @@ nav a:hover, .auth-switch a { color: var(--blue); }
 .container { width: min(1100px, calc(100% - 40px)); margin: 0 auto; min-height: calc(100vh - 132px); padding: 45px 0 72px; }
 footer { padding: 18px; text-align: center; color: #9aa5b7; font-size: 12px; }
 
+.notification-stack { position: fixed; z-index: 1000; top: 18px; left: 50%; display: grid; gap: 12px; width: min(560px, calc(100% - 32px)); transform: translateX(-50%); pointer-events: none; }
+.notification { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px; border: 1px solid; border-radius: 14px; background: #fff; box-shadow: 0 14px 42px #172b4d30; pointer-events: auto; animation: notification-enter .24s ease-out; transition: opacity .25s ease, transform .25s ease; }
+.notification-dismissed { opacity: 0; transform: translateY(-10px); }
+.notification-success { border-color: #a9dfc8; color: #145b43; }
+.notification-warning { border-color: #f0d18a; color: #704a00; }
+.notification-error { border-color: #efb3b7; color: #812d35; }
+.notification-info { border-color: #b7c9f5; color: #294c9b; }
+.notification-icon { display: grid; flex: 0 0 34px; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: currentColor; color: #fff; font-size: 19px; font-weight: 700; }
+.notification-content { flex: 1; min-width: 0; }
+.notification-title { display: block; margin-bottom: 4px; font-size: 14px; }
+.notification-content p { margin: 0; color: #44536b; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.notification-close { display: grid; flex: 0 0 30px; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 7px; background: transparent; color: #718096; font-size: 24px; line-height: 1; cursor: pointer; }
+.notification-close:hover { background: #f0f3f8; color: #263b5b; }
+@keyframes notification-enter { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .notification, .notification-dismissed { animation: none; transition: none; } }
+
 .page-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 30px; }
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 8px; font-size: clamp(23px, 3vw, 30px); letter-spacing: -.8px; }

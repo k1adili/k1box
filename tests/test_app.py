@@ -41,6 +41,22 @@ class FileSharingAppTests(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            self.app.get_db().execute(
+                "UPDATE users SET is_active = 1 WHERE username = ?", (username,)
+            )
+            self.app.get_db().commit()
+        client.get("/login")
+        response = client.post(
+            "/login",
+            data={
+                "csrf_token": self.csrf_token(client),
+                "username": username,
+                "password": password,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(client.get("/dashboard").status_code, 200)
         return client
 
     def upload(self, client, name: str, visibility: str):
@@ -302,6 +318,102 @@ class FileSharingAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Password must be at least 8 characters long.", response.data)
 
+    def test_new_accounts_wait_for_admin_approval_before_login(self) -> None:
+        client = self.app.test_client()
+        client.get("/register")
+        response = client.post(
+            "/register",
+            data={
+                "csrf_token": self.csrf_token(client),
+                "username": "pending_user",
+                "password": "password123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.location, "/login")
+        login_page = client.get("/login")
+        self.assertIn(b"waiting for administrator approval", login_page.data)
+        with self.app.app_context():
+            pending = self.app.get_db().execute(
+                "SELECT is_active FROM users WHERE username = ?", ("pending_user",)
+            ).fetchone()
+            self.assertEqual(pending["is_active"], 0)
+        response = client.post(
+            "/login",
+            data={
+                "csrf_token": self.csrf_token(client),
+                "username": "pending_user",
+                "password": "password123",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"waiting for administrator approval or has been deactivated", response.data)
+        self.assertIn(b'class="notification notification-warning"', response.data)
+        self.assertIn(b"Action required", response.data)
+        self.assertIn(b"Dismiss notification", response.data)
+        self.assertEqual(client.get("/dashboard").location, "/login")
+
+        admin = self.logged_in_admin()
+        pending_id = self.user_id("pending_user")
+        response = admin.post(
+            f"/admin/users/{pending_id}/toggle-active",
+            data={"csrf_token": self.csrf_token(admin)},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        response = client.post(
+            "/login",
+            data={
+                "csrf_token": self.csrf_token(client),
+                "username": "pending_user",
+                "password": "password123",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(client.get("/dashboard").status_code, 200)
+
+    def test_admin_can_deactivate_user_and_revoke_existing_session(self) -> None:
+        user = self.create_user("deactivate_target")
+        admin = self.logged_in_admin()
+        user_id = self.user_id("deactivate_target")
+
+        response = admin.post(
+            f"/admin/users/{user_id}/toggle-active",
+            data={"csrf_token": self.csrf_token(admin)},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(user.get("/dashboard").location, "/login")
+        user.get("/login")
+        response = user.post(
+            "/login",
+            data={
+                "csrf_token": self.csrf_token(user),
+                "username": "deactivate_target",
+                "password": "password123",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"waiting for administrator approval or has been deactivated", response.data)
+
+    def test_admin_cannot_deactivate_own_account(self) -> None:
+        admin = self.logged_in_admin()
+        admin_id = self.user_id("admin")
+
+        response = admin.post(
+            f"/admin/users/{admin_id}/toggle-active",
+            data={"csrf_token": self.csrf_token(admin)},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(admin.get("/admin").status_code, 200)
+        with self.app.app_context():
+            admin_row = self.app.get_db().execute(
+                "SELECT is_active FROM users WHERE id = ?", (admin_id,)
+            ).fetchone()
+            self.assertEqual(admin_row["is_active"], 1)
+
     def test_admin_default_password_requires_change_before_using_site(self) -> None:
         client = self.app.test_client()
         client.get("/login")
@@ -508,12 +620,20 @@ class FileSharingAppTests(unittest.TestCase):
 
         with migrated_app.app_context():
             users = migrated_app.get_db().execute(
-                "SELECT username, is_admin, must_change_password "
+                "SELECT username, is_admin, is_active, must_change_password "
                 "FROM users ORDER BY username"
             ).fetchall()
         self.assertEqual(
-            [(user["username"], user["is_admin"], user["must_change_password"]) for user in users],
-            [("admin", 1, 1), ("legacy_user", 0, 0)],
+            [
+                (
+                    user["username"],
+                    user["is_admin"],
+                    user["is_active"],
+                    user["must_change_password"],
+                )
+                for user in users
+            ],
+            [("admin", 1, 1, 1), ("legacy_user", 0, 1, 0)],
         )
 
     def test_admin_account_survives_restart_without_resetting_changed_password(self) -> None:
